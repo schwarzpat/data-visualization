@@ -1,0 +1,384 @@
+---
+title: "Untitled"
+author: "Patrick Schwarz"
+date: "7 1 2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment = "#>",
+  collapse = TRUE,
+  cache = TRUE,
+  out.width = "70%",
+  fig.align = 'center',
+  fig.width = 6,
+  fig.asp = 0.618,  # 1 / phi
+  fig.show = "hold")
+library(fastDummies)
+library(AER)
+library(stargazer)
+library(lmtest)
+library(equatiomatic)
+library(ggplot2)
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(hrbrthemes)
+
+```
+
+```{r}
+vote <- read.csv("ESS8.csv", 
+                 header = TRUE, 
+                 sep    = ";", 
+                 quote  = "",
+                 dec    = ".", 
+                 fill   = TRUE)
+```
+
+Table1: Variables in the data set
+
+Variable                    Description          
+---------                   ---------         
+Party                       Name of the party the respondent voted last election
+Trust in Politicians        Categorical response with 3 levels
+Age                         Age of the respondent
+Religiousness               Likert scale from 0-10 min to max
+Gender                      Male or Female
+Happiness                   Likert scale from 0-10 min to max
+Health                      Health of the respondent from very good to very bad
+Caring for Others           Ordinal in 6 steps from very much to not at all
+
+```{r}
+# Number of obs before removing rows
+NumObs_before <- nrow(vote)
+
+vote <- vote[ which(vote$trstplt   < 11),]
+
+vote <- vote[ which(vote$happy   < 11),]
+vote <- vote[ which(vote$prtvtbse  < 13),]
+vote <- vote[ which(vote$health  < 6),]
+vote <- vote[ which(vote$rlgdgr   < 11),]
+vote <- vote[ which(vote$agea  < 91),]
+vote <- vote[ which(vote$iphlppl   < 7),] #care
+vote <- vote[ which(vote$imptrad   < 7),] #tradition
+
+
+# Number of obs after removing rows
+NumObs_after <- nrow(vote)
+
+# Number removed 
+NumObs_removed = NumObs_before-NumObs_after
+NumObs_removed
+
+```
+
+```{r}
+
+vote <-
+  vote %>%
+   rename(  Trustfulness = ppltrst,
+            Helpfulness = pplhlp,
+            Trust_politicians  = trstplt,
+            Happiness = happy, 
+            Health = health,
+            Care_for_others = iphlppl ,
+            Traditionalist = imptrad ,
+            Hedonist = impfun,
+            Age = agea,
+            Party = prtvtbse)
+
+```
+
+
+
+```{r}
+vote2 <-
+  vote %>%
+  mutate(
+    Trust_politicians = recode(
+      Trust_politicians,
+      "0" = "less trusting",
+      "1" = "less trusting",
+      "2" = "less trusting",
+      "3" = "less trusting",
+      "4" = "less trusting",
+      "5" = "neutral",
+      "6" = "more trusting",
+      "7" = "more trusting",
+      "8" = "more trusting",
+      "9" = "more trusting",
+      "10" = "more trusting")) %>%
+  mutate(
+    Health = recode(
+      Health,
+      "1" = "Very good",
+      "2" = "Good",
+      "3" = "Fair",
+      "4" = "Bad",
+      "5" = "Very bad")) %>%
+  mutate(
+    Traditionalist = recode(
+      Traditionalist,
+      "1" = "Very much like me",
+      "2" = "Like me",
+      "3" = "Somewhat like me",
+      "4" = "A little like me",
+      "5" = "Not like me",
+      "6" = "Not like me at all")) %>%
+  mutate(
+    Hedonist = recode(
+      Hedonist,
+      "1" = "Very much like me",
+      "2" = "Like me",
+      "3" = "Somewhat like me",
+      "4" = "A little like me",
+      "5" = "Not like me",
+      "6" = "Not like me at all")) %>%
+  mutate(
+    Care_for_others = recode(
+      Care_for_others,
+      "1" = "Very much like me",
+      "2" = "Like me",
+      "3" = "Somewhat like me",
+      "4" = "A little like me",
+      "5" = "Not like me",
+      "6" = "Not like me at all")) %>%
+  mutate(
+    Gender = recode(
+      gndr,
+      "1" = "Male",
+      "2" = "Female",
+      ))%>%
+  mutate(
+    Party = recode(
+      Party,
+      "1" = "Center",
+      "2" = "Liberals",
+      "3" = "Christian Democrats",
+      "5" = "Conservatives",
+      "4" = "Green Party",
+      "6" = "Social Democrats",
+      "7" = "Left Party",
+      "8" = "Feminist Party",
+      "9" = "Pirate Party",
+      "10" = "Swedish Democrats",
+      "11" = "Other"
+      )) %>%
+  mutate(Farbe = case_when(
+           Party == "Center" ~ "#B3FFB3",
+           Party == "Liberals" ~ "#99CCFF" ,
+      Party == "Christian Democrats" ~ "#B0C4DE" ,
+      Party ==  "Conservatives" ~ "#CCDDFF" ,
+      Party == "Green Party" ~ "#CDE6AC" ,
+      Party == "Social Democrats" ~ "#ed1b34" ,
+      Party ==  "Left Party" ~ "#FF6E6E" ,
+      Party ==  "Feminist Party" ~ "#FFBBBB" ,
+      Party ==  "Pirate Party" ~ "#CC99CC" ,
+      Party == "Swedish Democrats" ~ "#fedf09" ,
+      Party == "Other" ~ "Grey" ))
+
+# From the documentation of the variable prtvtbse
+# Values and categories:
+#  1	Centern (center party)
+#  2	Folkpartiet liberalerna (liberals)
+#  3	Kristdemokraterna (christian democrats)
+#  4	Miljöpartiet de gröna (green party)
+#  5	Moderata samlingspartiet (conservatives)
+#  6	Socialdemokraterna (social democrates)
+#  7	Vänsterpartiet (left party)
+#  8	FI (Feministiskt initiativ) (feminist party)
+#  9	Piratpartiet (pirate party)
+# 10	Sverigedemokraterna (swedish democrats)
+# 11	Annat parti (other party)
+# 66	Not applicable
+# 77	Refusal
+# 88	Don't know
+# 99	No answer
+    
+vote2$Trust_politicians <- factor(vote2$Trust_politicians, levels = c(
+  "less trusting", "neutral","more trusting"), ordered=FALSE)
+
+vote2$Health <- factor(vote2$Health, levels = c(
+      "Very good",
+      "Good",
+      "Fair",
+      "Bad",
+      "Very bad"), ordered=FALSE)
+
+vote2$Traditionalist <- factor(vote2$Traditionalist, levels = c(
+ "Very much like me",
+ "Like me",
+ "Somewhat like me",
+ "A little like me",
+ "Not like me",
+  "Not like me at all"), ordered=FALSE)
+
+vote2$Hedonist <- factor(vote2$Hedonist, levels = c(
+ "Very much like me",
+ "Like me",
+ "Somewhat like me",
+ "A little like me",
+ "Not like me",
+  "Not like me at all"), ordered=FALSE)
+
+vote2$Care_for_others <- factor(vote2$Care_for_others, levels = c(
+ "Very much like me",
+ "Like me",
+ "Somewhat like me",
+ "A little like me",
+ "Not like me",
+  "Not like me at all"), ordered=FALSE)
+
+vote2$Gender <- factor(vote2$Gender)
+vote2$Party <- factor(vote2$Party)
+
+```
+
+```{r}
+fill_colors = as.character(vote2$Farbe)
+names(fill_colors) = vote2$Party
+```
+
+
+```{r}
+task1 <- read.csv('votesT.csv',header = TRUE, 
+                 sep    = ";", 
+                 quote  = "",
+                 dec    = ",", 
+                 fill   = TRUE)
+
+colnames(task1) <- c('party', 'ESS Sample', '2014 Election', 'delta')
+
+task1 %>%
+  pivot_longer(c('ESS Sample', '2014 Election'), names_to = "year", values_to = "Votes") %>%
+  select(-starts_with("delta")) %>%
+  ggplot()+
+  geom_bar(aes(x = fct_infreq(party), y=Votes, fill = party), stat = 'identity')+
+  facet_grid(vars(year)) +
+  theme(axis.text.x = element_text(angle = 35, vjust = 1, hjust=1, size = 8)) +
+  geom_text(aes( x = party, y=Votes, label =Votes), size = 3) +
+  guides(fill=FALSE) +
+  xlab('Parties') + ylab ("Vote Percentage") +  
+  scale_fill_manual(values = fill_colors)
+```
+
+
+
+```{r}
+
+  
+p <- vote2 %>%
+  ggplot( aes(x=Party, y=Age, fill=Party)) + 
+    geom_boxplot() +
+    xlab("class") +
+    theme(legend.position="none") +
+    xlab("") +  scale_fill_manual(values = fill_colors) + coord_flip() + xlab("Party")
+  
+p
+```
+
+
+
+
+Force discrete palette
+```{r}
+ggplot(data=vote2, aes(x=rlgdgr, group=Party, fill=Party)) +
+    geom_density() +
+    theme_ipsum() +
+    facet_wrap(~Party) +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      axis.ticks.x=element_blank()) +  
+  scale_fill_manual(values = fill_colors) +
+  
+  theme(axis.text.x = element_text(size = 6)) +
+    theme(axis.text.y = element_text(size = 8)) +
+  xlab('Religiousness from not at all (0) to very much (10)')+ylab("Distribution of Answers")
+ 
+```
+
+```{r}
+library(productplots)
+
+prodplot(vote2, ~Traditionalist + Gender + stacked()) + aes(fill = Gender) +
+    theme(legend.position="none")
+sda <- prodplot(vote2, ~Trust_politicians + Party + stacked()) + labs(y="Trust in Politicians")+ aes(fill = Party) + coord_flip() +   
+  scale_fill_manual(values = fill_colors)+
+    theme(legend.position="none") 
+set_y_axis_label <- function(pl, new_label) {
+  pl$scales$scales[[1]]$name <- new_label
+  pl
+}
+set_y_axis_label(sda, "Trust in Politicians")
+sda
+```
+```{r}
+vote3 <-
+  vote2 %>%
+    filter( Party != "Other") %>%
+    filter( Party != "Pirate Party") %>%
+    filter( Party != "Feminist Party") %>%
+    mutate(Farbe = case_when(
+           Party == "Center" ~ "#B3FFB3",
+           Party == "Liberals" ~ "#99CCFF" ,
+      Party == "Christian Democrats" ~ "#B0C4DE" ,
+      Party ==  "Conservatives" ~ "#CCDDFF" ,
+      Party == "Green Party" ~ "#CDE6AC" ,
+      Party == "Social Democrats" ~ "#ed1b34" ,
+      Party ==  "Left Party" ~ "#FF6E6E" ,
+      Party == "Swedish Democrats" ~ "#fedf09"  ))
+
+fill_colors2 = as.character(vote3$Farbe) 
+names(fill_colors2) = vote3$Party 
+tibble( fill_colors2)
+
+vote3 %>%
+    ggplot(aes(y = Happiness, x = Health, group = Party,  colour = fill_colors2)) +
+        geom_point(position=position_jitter(h=1, w=1),
+                 shape = 21, alpha = 0.5, size = 2) +
+        facet_grid(vars(Gender), vars(Party))   +
+theme(strip.text = element_text(angle =33,   size=6)) +
+      
+      theme(axis.text.x = element_text(angle = 90 ,size = 8)) +
+        theme(axis.text.y = element_text(size = 8)) +
+        theme(legend.position="none")
+ 
+```
+
+
+
+
+```{r}
+vote2 %>%
+  ggplot(aes(Party, fill = Care_for_others)) +
+    geom_bar(position="fill") +
+  ylab("Proportion") +
+      
+      theme(axis.text.x = element_text(size = 8)) +
+  coord_flip() +
+  scale_fill_ordinal(name = "Caring for Others")
+```
+
+
+```{r}
+    require(extrafont)
+    # need only do this once!
+    font_import(pattern="[A/a]rial", prompt=FALSE)
+    require(ggplot2)
+    # extending the help file example
+    df <- data.frame(gp = factor(rep(letters[1:3], each = 10)), y = rnorm(30))
+    ds <- plyr::ddply(df, "gp", plyr::summarise, mean = mean(y), sd = sd(y))
+    plotobj <- ggplot(df, aes(gp, y)) +
+      geom_point() +
+      geom_point(data = ds, aes(y = mean), colour = 'red', size = 3) + 
+      theme(text=element_text(size=16))
+    print(plotobj)
+```
+
